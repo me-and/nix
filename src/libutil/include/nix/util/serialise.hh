@@ -638,4 +638,14 @@ struct FramedSink : nix::BufferedSink
     };
 };
 
+/**
+ * Source type that can be restarted.
+ */
+struct RestartableSource : Source
+{
+    virtual void restart() = 0;
+};
+
+std::unique_ptr<RestartableSource> restartableSourceFromFactory(std::function<std::unique_ptr<Source>()> factory);
+
 } // namespace nix
