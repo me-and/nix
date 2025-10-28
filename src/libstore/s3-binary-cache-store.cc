@@ -19,8 +19,8 @@ public:
     {
     }
 
-    void
-    upsertFile(const std::string & path, Source & source, const std::string & mimeType, uint64_t sizeHint) override;
+    void upsertFile(
+        const std::string & path, RestartableSource & source, const std::string & mimeType, uint64_t sizeHint) override;
 
 private:
     ref<S3BinaryCacheStoreConfig> s3Config;
@@ -53,7 +53,7 @@ private:
 };
 
 void S3BinaryCacheStore::upsertFile(
-    const std::string & path, Source & source, const std::string & mimeType, uint64_t sizeHint)
+    const std::string & path, RestartableSource & source, const std::string & mimeType, uint64_t sizeHint)
 {
     HttpBinaryCacheStore::upsertFile(path, source, mimeType, sizeHint);
 }
@@ -72,7 +72,8 @@ std::string S3BinaryCacheStore::createMultipartUpload(
     req.uri = VerbatimURL(url);
 
     req.method = HttpMethod::POST;
-    req.data = "";
+    StringSource payload{std::string_view("")};
+    req.data = {payload};
     req.mimeType = mimeType;
 
     if (contentEncoding) {
@@ -101,7 +102,8 @@ S3BinaryCacheStore::uploadPart(std::string_view key, std::string_view uploadId, 
     url.query["partNumber"] = std::to_string(partNumber);
     url.query["uploadId"] = uploadId;
     req.uri = VerbatimURL(url);
-    req.data = std::move(data);
+    StringSource payload{data};
+    req.data = {payload};
     req.mimeType = "application/octet-stream";
 
     auto result = getFileTransfer()->enqueueFileTransfer(req).get();
