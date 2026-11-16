@@ -27,7 +27,7 @@ void MissingExperimentalFeature::anchor() {}
  * feature, we either have no issue at all if few features are not added
  * at the end of the list, or a proper merge conflict if they are.
  */
-constexpr size_t numXpFeatures = 1 + static_cast<size_t>(Xp::BLAKE3Hashes);
+constexpr size_t numXpFeatures = 1 + static_cast<size_t>(Xp::GCRegistrationOrder);
 
 constexpr std::array<ExperimentalFeatureDetails, numXpFeatures> xpFeatureDetails = {{
     {
@@ -269,6 +269,32 @@ constexpr std::array<ExperimentalFeatureDetails, numXpFeatures> xpFeatureDetails
             Enables support for BLAKE3 hashes.
         )",
         .trackingUrl = "https://github.com/NixOS/nix/milestone/60",
+    },
+    {
+        .tag = Xp::GCRegistrationOrder,
+        .name = "gc-registration-order",
+        .description = R"(
+            Prefer older registration times when selecting candidates for
+            whole-store garbage collection, including automatic garbage collection.
+            Unregistered entries are considered first.
+            Equal registration times are ordered by store path, and unknown
+            registration times (zero) are treated as oldest.
+
+            This is a candidate-selection preference, not a strict deletion order:
+            unreachable referrers may need to be deleted before their dependencies.
+            Reachable paths remain protected.
+            Registration time is neither last-use time nor the time a path became
+            unreachable.
+
+            This requires reading registration metadata and buffering candidates
+            before deleting registered paths, increasing startup time and memory use.
+            Explicit-path deletion and live/dead reporting are unchanged.
+
+            Enable this feature in the process performing garbage collection.
+            For daemon-backed stores, enable it in the daemon's configuration;
+            client experimental-feature settings are not forwarded to the daemon.
+        )",
+        .trackingUrl = "https://github.com/NixOS/nix/issues?q=gc-registration-order",
     },
 }};
 

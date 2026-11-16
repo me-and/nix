@@ -116,6 +116,7 @@ suites = [
       'gc-closure.sh',
       'gc-concurrent.sh',
       'gc-non-blocking.sh',
+      'gc-registration-order.sh',
       'gc-runtime.sh',
       'gc.sh',
       'hash-convert.sh',
@@ -193,6 +194,20 @@ suites = [
     'workdir' : meson.current_source_dir(),
   },
 ]
+
+suites += {
+  'name' : 'gc-registration-order',
+  'deps' : [],
+  'tests' : [
+    'gc.sh',
+    'gc-auto.sh',
+    'gc-closure.sh',
+    'gc-concurrent.sh',
+    'gc-non-blocking.sh',
+  ],
+  'env' : {'NIX_CONFIG' : 'extra-experimental-features = gc-registration-order'},
+  'workdir' : meson.current_source_dir(),
+}
 
 nix_store = dependency('nix-store', required : false)
 if nix_store.found()

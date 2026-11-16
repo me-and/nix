@@ -16,3 +16,11 @@ suites += {
   ],
   'workdir' : meson.current_source_dir(),
 }
+
+suites += {
+  'name' : 'local-overlay-store-gc-registration-order',
+  'deps' : [],
+  'tests' : [ 'gc.sh' ],
+  'env' : {'NIX_CONFIG' : 'extra-experimental-features = gc-registration-order'},
+  'workdir' : meson.current_source_dir(),
+}

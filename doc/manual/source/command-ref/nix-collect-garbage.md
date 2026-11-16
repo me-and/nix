@@ -11,6 +11,9 @@
 The command `nix-collect-garbage` is mostly an alias of [`nix-store --gc`](@docroot@/command-ref/nix-store/gc.md).
 That is, it deletes all unreachable [store objects] in the Nix store to clean up your system.
 
+The experimental `gc-registration-order` feature can make collection prefer older registered paths.
+See [garbage collection ordering](@docroot@/command-ref/nix-store/gc.md#ordering) for enablement and limitations.
+
 However, it provides two additional options,
 [`--delete-old`](#opt-delete-old) and [`--delete-older-than`](#opt-delete-older-than),
 which also delete old [profiles], allowing potentially more [store objects] to be deleted because profiles are also garbage collection roots.
