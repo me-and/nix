@@ -50,6 +50,36 @@ configuration file.
 By default, the collector prints the total number of freed bytes when it
 finishes (or when it is interrupted).
 
+## Ordering {#ordering}
+
+By default, garbage collection considers candidates in filesystem directory order.
+The experimental feature
+[`gc-registration-order`](@docroot@/development/experimental-features.md#xp-feature-gc-registration-order)
+instead prefers candidates with older recorded registration times.
+This also applies to `nix store gc`, `nix-collect-garbage`, and automatic garbage collection.
+It is particularly useful when collection stops early after freeing a requested amount of space.
+
+Unregistered entries are considered first, in filesystem order.
+Registered candidates are ordered by increasing registration time, with store-path names breaking ties.
+An unknown registration time (zero) is treated as oldest.
+Registration time is neither last-use time nor the time a path became unreachable.
+The ordering uses a snapshot of registration metadata, so concurrent registrations may affect it.
+
+This is a candidate-selection preference, not a strict deletion order.
+Newer unreachable paths referring to an older candidate may need to be deleted first.
+Reachability checks and GC roots still protect live paths.
+Explicit-path deletion, live/dead reporting, and dry runs are unchanged.
+Preparing the candidate order requires additional startup time and memory proportional to the number of registered paths and directory entries.
+
+Enable the feature in the process performing collection:
+
+```ini
+extra-experimental-features = gc-registration-order
+```
+
+For daemon-backed stores, set this in the daemon's configuration and restart the daemon.
+Client experimental-feature settings are not forwarded to the daemon.
+
 {{#include ./opt-common.md}}
 
 {{#include ../opt-common.md}}
@@ -72,4 +102,3 @@ To delete at least 100 MiBs of unreachable paths:
 ```console
 $ nix-store --gc --max-freed $((100 * 1024 * 1024))
 ```
-

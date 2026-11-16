@@ -18,6 +18,7 @@
 #include <boost/unordered/unordered_flat_map.hpp>
 #include <boost/unordered/unordered_flat_set.hpp>
 #include <boost/regex.hpp>
+#include <algorithm>
 #include <queue>
 #include <thread>
 #include <errno.h>
@@ -804,22 +805,66 @@ void LocalStore::collectGarbage(const GCOptions & options, GCResults & results)
                     if (!dir)
                         throw SysError("opening directory %1%", PathFmt(config->realStoreDir.get()));
 
-                    /* Read the store and delete all paths that are invalid or
-                    unreachable. We don't use readDirectory() here so that
-                    GCing can start faster. */
-                    auto linksName = linksDir.filename();
-                    struct dirent * dirent;
-                    while (errno = 0, dirent = readdir(dir.get())) {
-                        checkInterrupt();
-                        std::string name = dirent->d_name;
-                        if (name == "." || name == ".." || name == linksName)
-                            continue;
+                    bool orderByRegistrationTime = options.action == GCOptions::gcDeleteDead
+                                                   && experimentalFeatureSettings.isEnabled(Xp::GCRegistrationOrder);
+                    std::vector<std::pair<int64_t, StorePath>> candidates;
+                    {
+                        using RegistrationTimes = boost::unordered_flat_map<StorePath, int64_t, std::hash<StorePath>>;
+                        RegistrationTimes registrationTimes;
+                        if (orderByRegistrationTime) {
+                            registrationTimes = retrySQLite<RegistrationTimes>([&]() {
+                                auto state(_state->lock());
+                                SQLiteStmt stmt(state->db, "select path, registrationTime from ValidPaths");
+                                auto query(stmt.use());
+                                RegistrationTimes times;
+                                while (query.next()) {
+                                    checkInterrupt();
+                                    times.emplace(parseStorePath(query.getStr(0)), query.getInt(1));
+                                }
+                                return times;
+                            });
+                            candidates.reserve(registrationTimes.size());
+                        }
 
-                        if (auto storePath = maybeParseStorePath(storeDir + "/" + name))
-                            maybeDeleteReferrersClosure(*storePath);
-                        else
-                            deleteFromStore(name, false);
+                        /* Keep streaming when ordering is disabled so deletion can start immediately. */
+                        auto linksName = linksDir.filename();
+                        struct dirent * dirent;
+                        while (errno = 0, dirent = readdir(dir.get())) {
+                            checkInterrupt();
+                            std::string name = dirent->d_name;
+                            if (name == "." || name == ".." || name == linksName)
+                                continue;
+
+                            if (auto storePath = maybeParseStorePath(storeDir + "/" + name)) {
+                                if (orderByRegistrationTime) {
+                                    if (auto i = registrationTimes.find(*storePath); i != registrationTimes.end()) {
+                                        candidates.emplace_back(i->second, std::move(*storePath));
+                                        continue;
+                                    }
+                                    /* Concurrent registrations and overlay lower paths
+                                       may be absent from the snapshot. */
+                                    try {
+                                        auto info = queryPathInfo(*storePath);
+                                        candidates.emplace_back(info->registrationTime, std::move(*storePath));
+                                        continue;
+                                    } catch (InvalidPath &) {
+                                        /* Content can precede registration during builds/imports,
+                                           or remain unregistered after interruption or manual copying.
+                                           The existing traversal still checks temporary roots. */
+                                    }
+                                }
+                                maybeDeleteReferrersClosure(*storePath);
+                            } else if (shouldDelete)
+                                deleteFromStore(name, false);
+                        }
                     }
+
+                    /* Zero (unknown) sorts first defensively. Normal local registration
+                       replaces zero with the current time, but external database edits
+                       can leave it unknown. */
+                    std::ranges::sort(candidates);
+                    for (auto & [registrationTime, path] : candidates)
+                        maybeDeleteReferrersClosure(path);
                 },
             },
             options.pathsToDelete);
